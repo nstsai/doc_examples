@@ -1,0 +1,401 @@
+openapi: "3.0.2"
+info:
+  title: Comments and reactions API
+  description: API для работы с комментариями, реакциями и лайками
+  version: '1.0'
+  
+servers:
+- url: https://api.server.test/v1
+  
+security:
+  - bearerAuth: []
+
+tags:
+  - name: reactions and likes
+    description: про реакции и лайки
+  - name: comments
+    description: про комментарии
+
+paths:
+  /reactions:
+    get:
+      tags:
+      - reactions and likes
+      summary: Получение иконок реакций
+      description: Метод вызывается при запуске приложения
+      parameters:
+        - name: user_id
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: ОК
+        '500':
+          description: Внутренняя ошибка сервера
+  
+  /posts/{post_id}/reactions:
+    get:
+      tags:
+        - reactions and likes
+      summary: Реакции к публикации
+      description: Получаем типы реакций к публикации и их количество
+      parameters:
+        - name: post_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: userLiked
+          in: query
+          required: true
+          schema:
+            type: boolean
+            default: false
+      responses:
+        '200':
+          description: Реакции успешно загружены
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  allOf:
+                    - $ref: '#/components/schemas/Reaction'
+                    - $ref: '#/components/schemas/UserLiked'
+        '404':
+          description: Публикация не найдена
+        '500':
+          description: Внутренняя ошибка сервера
+
+  /posts/{post_id}/like:
+    patch:
+      tags:
+        - reactions and likes
+      summary: Поставить/удалить лайк
+      description: Изменение состояния лайка
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: post_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: user_id
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: userLiked
+          in: query
+          required: true
+          schema:
+            type: boolean
+            default: false
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                user_id:
+                  type: string
+                  format: uuid
+                userLiked:
+                  type: boolean
+                  default: false
+                reaction_type:
+                  $ref: '#/components/schemas/Reaction'
+      responses:
+        '200':
+          description: OK
+        '404':
+          description: Публикация не найдена
+        '500':
+          description: Внутренняя ошибка сервера
+    
+  /posts/{post_id}/comments:
+    get:
+      tags:
+        - comments
+      summary: Получение списка комментариев
+      description: Получаем список комментариев и поставленные к ним реакции
+      parameters:
+        - name: post_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: offset
+          in: query
+          required: false
+          schema:
+            type: integer
+            description: Загрузка новых комментариев при прокрутке страницы
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            description: Количество комментариев для загрузки (по умолчанию 10)
+      responses:
+        '200':
+          description: Список комментариев успешно получен
+          content:
+            application/json:
+              schema:
+                type: array
+                required:
+                  - comment_id
+                  - author_id
+                  - avatar
+                  - content
+                  - createdAt
+                  - reaction_id
+                  - count
+                  - userLiked
+                items:
+                  allOf:
+                  - $ref: '#/components/schemas/Comment'
+                  - $ref: '#/components/schemas/Reaction'
+                  - $ref: '#/components/schemas/UserLiked'
+        '404':
+          description: Публикация не найдена
+        '500':
+          description: Внутренняя ошибка сервера
+
+    post:
+      tags:
+        - comments
+      summary: Оставить комментарий
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: post_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: user_id
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: content
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: request_id
+          in: query
+          required: true
+          schema:
+            type: string
+            description: Уникальный идентификатор запроса для идемпотентности
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                request_id:
+                  type: string
+                author_id:
+                  type: string
+                content:
+                  type: string
+      responses:
+        '201':
+          description: OK
+        '404':
+          description: Публикация не найдена
+        '409':
+          description: Конфликт, комментарий уже был оставлен с этим request_id
+        '500':
+          description: Внутренняя ошибка сервера
+
+    put:
+      tags:
+        - comments
+      summary: Редактировать комментарий
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: post_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: comment_id
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: content
+          in: query
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                id:
+                  type: string
+                  format: uuid
+                content:
+                  type: string
+      responses:
+        '200':
+          description: OK
+        '404':
+          description: Комментарий или публикация не найдены
+        '500':
+          description: Внутренняя ошибка сервера
+          
+    delete:
+      tags:
+        - comments
+      summary: Удалить комментарий
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: post_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: comment_id
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: OK
+        '404':
+          description: Комментарий или публикация не найдены
+        '500':
+          description: Внутренняя ошибка сервера
+          
+  /posts/{post_id}/comments/{author_id}:
+    get:
+      tags:
+        - comments
+      summary: Переход на автора
+      description: Переход на страничку автора комментария при нажатии на его аватар
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: post_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: comment_id
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: author_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: avatar
+          in: query
+          required: true
+          schema:
+            type: string
+            format: url
+      responses:
+        '200':
+          description: ОК
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  author:
+                    type: object
+                    properties:
+                      id:
+                        type: string
+                        format: uuid
+                      username:
+                        type: string
+                      bio:
+                        type: string
+                      avatar:
+                        type: string
+                        format: uri
+        '404':
+          description: Пользователь не найден
+        '500':
+          description: Внутренняя ошибка сервера
+
+components:
+  schemas:
+    Reaction:
+      type: object
+      properties:
+        reaction_id:
+          type: string
+          enum:
+            - reaction1
+            - reaction2
+            - reaction3
+            - reaction4
+            - reaction5
+            - reaction6
+        count:
+          type: integer
+    
+    UserLiked:
+      type: object
+      properties:
+        userLiked:
+          type: boolean
+          default: false
+
+    Comment:
+      type: object
+      properties:
+        comment_id:
+          type: string
+          format: uuid
+        author_id:
+          type: string
+        avatar:
+          type: string
+          format: url
+        content:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+  
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
